@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Star-Separation - Otimizador de Estoque 3D</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js & OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              900: '#312e81',
+              dark: '#0f172a',
+              card: '#1e293b'
+            },
+            neon: {
+              cyan: '#06b6d4',
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              purple: '#a855f7'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #0b0f19;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .scanner-laser {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: #ef4444;
+      box-shadow: 0 0 12px 2px #ef4444;
+      animation: scanMove 2s infinite ease-in-out;
+    }
+    @keyframes scanMove {
+      0%, 100% { top: 5%; }
+      50% { top: 95%; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-brand-500 selection:text-white">
+
+  <!-- Top Navigation Bar -->
+  <header class="h-16 border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-neon-cyan flex items-center justify-center text-white shadow-lg shadow-brand-500/20">
+        <i class="fa-solid fa-cube text-xl"></i>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-indigo-300 bg-clip-text text-transparent">Star-Separation</h1>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30 uppercase tracking-wider">v1.0 Pro</span>
+        </div>
+        <p class="text-xs text-slate-400">Otimizador e Navegador de Estoque em 3D</p>
+      </div>
+    </div>
+
+    <!-- Quick Stats in Header -->
+    <div class="hidden md:flex items-center gap-6 text-xs">
+      <div class="flex items-center gap-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
+        <i class="fa-solid fa-layer-group text-brand-400"></i>
+        <span class="text-slate-400">Setores:</span>
+        <span id="stat-sectors" class="font-bold text-slate-200">5 Ativos</span>
+      </div>
+      <div class="flex items-center gap-2 bg-slate-800/60 px-3 py-1.5 rounded-lg border border-slate-700/50">
+        <i class="fa-solid fa-boxes-stacked text-neon-cyan"></i>
+        <span class="text-slate-400">Itens em Estoque:</span>
+        <span id="stat-items" class="font-bold text-slate-200">1.480 un</span>
+      </div>
+    </div>
+
+    <!-- Actions / Creator Credit -->
+    <div class="flex items-center gap-3">
+      <button onclick="toggleMobileView()" id="btn-device-toggle" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-2" title="Simular no Celular">
+        <i class="fa-solid fa-mobile-screen"></i>
+        <span class="hidden sm:inline">Modo Celular</span>
+      </button>
+
+      <button onclick="openModal('modal-info')" class="w-9 h-9 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center justify-center transition" title="Sobre o Projeto">
+        <i class="fa-solid fa-circle-info"></i>
+      </button>
+
+      <button onclick="openModal('modal-add-item')" class="bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-semibold text-xs px-3.5 py-2 rounded-lg shadow-lg shadow-indigo-500/20 flex items-center gap-2 transition transform active:scale-95">
+        <i class="fa-solid fa-plus"></i>
+        <span>Novo Item</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- Left / Center: Interactive 3D Warehouse Canvas -->
+    <div class="flex-1 flex flex-col relative h-[520px] lg:h-auto min-h-[460px] bg-slate-950">
+      
+      <!-- 3D Overlay Toolbar -->
+      <div class="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2 pointer-events-auto">
+        <div class="bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-800 shadow-xl flex items-center gap-1">
+          <button onclick="setCameraView('iso')" class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-cube text-brand-400"></i> Isométrica
+          </button>
+          <button onclick="setCameraView('top')" class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-map text-neon-cyan"></i> Planta 2D
+          </button>
+          <button onclick="setCameraView('entry')" class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition flex items-center gap-1.5">
+            <i class="fa-solid fa-person-walking text-neon-emerald"></i> Entrada
+          </button>
+          <button onclick="resetCamera()" class="p-1.5 text-xs rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition" title="Redefinir Câmera">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+
+        <button onclick="openModal('modal-terrain')" class="bg-slate-900/90 hover:bg-slate-800 backdrop-blur-md text-slate-300 border border-slate-800 px-3 py-2 rounded-xl text-xs font-medium shadow-xl flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-ruler-combined text-amber-400"></i>
+          <span>Dimensões do Terreno</span>
+        </button>
+      </div>
+
+      <!-- 3D Canvas Mount Point -->
+      <div id="canvas-container" class="w-full h-full relative cursor-grab active:cursor-grabbing"></div>
+
+      <!-- 3D Legend & Coordinates Footer -->
+      <div class="absolute bottom-4 left-4 right-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+        <div class="bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-4 pointer-events-auto">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+            <span>Entrada / Portaria</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-brand-500 inline-block"></span>
+            <span>Prateleiras / Racks</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/85 backdrop-blur-md px-3 py-1.5 rounded-lg border border-slate-800/80 text-[11px] text-slate-400 flex items-center gap-2 pointer-events-auto">
+          <i class="fa-solid fa-circle-nodes text-brand-400"></i>
+          <span>Use o botão esquerdo para girar e o botão direito para arrastar.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar: Management, Barcode Scanner & Inventory -->
+    <div id="sidebar-panel" class="w-full lg:w-96 xl:w-[420px] bg-slate-900 border-l border-slate-800 flex flex-col z-30 shadow-2xl transition-all duration-300">
+
+      <!-- Navigation Tabs -->
+      <div class="flex border-b border-slate-800 bg-slate-950/60 p-1">
+        <button onclick="switchTab('items')" id="tab-btn-items" class="flex-1 py-2.5 text-xs font-semibold rounded-lg bg-slate-800 text-white shadow-sm flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-barcode text-brand-400"></i>
+          <span>Buscar & Bipar</span>
+        </button>
+        <button onclick="switchTab('sectors')" id="tab-btn-sectors" class="flex-1 py-2.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 flex items-center justify-center gap-2 transition">
+          <i class="fa-solid fa-shapes text-neon-cyan"></i>
+          <span>Setores 3D</span>
+        </button>
+      </div>
+
+      <!-- TAB 1: ITEMS & BARCODE SEARCH -->
+      <div id="tab-content-items" class="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
+        
+        <!-- Barcode Scanner Card -->
+        <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 shadow-lg">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-camera text-brand-400 text-sm"></i>
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Scanner de Código de Barras</h3>
+            </div>
+            <span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-mono">Leitor Ativo</span>
+          </div>
+
+          <!-- Scanner Visual Simulation -->
+          <div class="relative w-full h-24 bg-slate-900 rounded-xl border border-dashed border-slate-700 flex flex-col items-center justify-center overflow-hidden group">
+            <div class="scanner-laser"></div>
+            <i class="fa-solid fa-barcode text-4xl text-slate-600 group-hover:text-slate-400 transition mb-1"></i>
+            <span class="text-[11px] text-slate-400">Aponte a câmera ou digite o código</span>
+          </div>
+
+          <!-- Input + Scan Trigger -->
+          <div class="mt-3 flex gap-2">
+            <div class="relative flex-1">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+              <input id="barcode-input" type="text" placeholder="Ex: 7891001, Parafuso, Placa..." 
+                onkeyup="handleSearchInput(event)"
+                class="w-full bg-slate-900 text-white text-xs pl-8 pr-3 py-2.5 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none transition font-mono placeholder:font-sans">
+            </div>
+            <button onclick="scanBarcodeSimulation()" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-brand-600/20" title="Simular Leitura Instantânea">
+              <i class="fa-solid fa-bolt"></i>
+              <span class="hidden sm:inline">Bipar</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inventory List Header -->
+        <div class="flex items-center justify-between pt-1">
+          <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <i class="fa-solid fa-box-archive text-slate-500"></i>
+            Catálogo Cadastrado (<span id="items-count">0</span>)
+          </h4>
+          <div class="flex items-center gap-1">
+            <select id="filter-sector" onchange="filterItemsBySector(this.value)" class="bg-slate-800 text-[11px] text-slate-300 py-1 px-2 rounded-lg border border-slate-700 focus:outline-none">
+              <option value="ALL">Todos os Setores</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Product Cards Container -->
+        <div id="items-list-container" class="space-y-2.5 flex-1 overflow-y-auto pr-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+
+      <!-- TAB 2: SECTORS & TERRAIN SEPARATION -->
+      <div id="tab-content-sectors" class="hidden flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
+        <div class="bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-900/50 p-4 rounded-2xl">
+          <div class="flex items-center gap-2 text-indigo-400 mb-1">
+            <i class="fa-solid fa-wand-magic-sparkles text-sm"></i>
+            <h3 class="text-xs font-bold uppercase tracking-wider">Divisão Automática 3D</h3>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            O algoritmo do Star-Separation distribui os setores inteligentemente pelo tamanho do galpão, evitando mistura de produtos e atrasos operacionais.
+          </p>
+          <div class="mt-3 flex gap-2">
+            <button onclick="autoOptimizeWarehouse()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-2 px-3 rounded-xl transition flex items-center justify-center gap-1.5">
+              <i class="fa-solid fa-arrows-split-up-and-left"></i>
+              Reorganizar Setores
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-3" id="sectors-management-list">
+          <!-- Dynamically populated list of sectors -->
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <div class="p-3 border-t border-slate-800 bg-slate-950 text-center text-[11px] text-slate-500 flex items-center justify-between">
+        <span>Star-Separation Mobile Ready</span>
+        <span class="text-brand-400 font-medium">Idealizado por André Passos</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- MODAL: SOBRE O STAR-SEPARATION -->
+  <div id="modal-info" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-info')" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-600 to-cyan-400 flex items-center justify-center text-white text-2xl shadow-lg shadow-brand-500/30">
+          <i class="fa-solid fa-rocket"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-extrabold text-white">Star-Separation</h2>
+          <p class="text-xs text-brand-400 font-medium">O Aplicativo do Futuro para Indústria e Logística</p>
+        </div>
+      </div>
+
+      <div class="space-y-3 text-xs text-slate-300 leading-relaxed max-h-[60vh] overflow-y-auto pr-2">
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+          <strong class="text-white block mb-1">Criador e Visão:</strong>
+          <span>Projeto de <strong>André Passos Silveira</strong> (CEO e Criador). Foco em eliminar desorganizações em fábricas e estoques industriais na América Latina.</span>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+          <strong class="text-white block mb-1">Pilares Fundamentais:</strong>
+          <ul class="list-disc pl-4 space-y-1 text-slate-300">
+            <li><strong>Planta 3D Inteligente:</strong> Distribui setores de acordo com as dimensões do terreno da empresa.</li>
+            <li><strong>Catálogo por Código de Barras:</strong> Acaba com misturas manuais e itens perdidos.</li>
+            <li><strong>Localização Visual:</strong> Foco automático nas áreas e prateleiras dos produtos.</li>
+            <li><strong>Universal:</strong> Funciona em qualquer celular Android ou iOS.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="mt-5 pt-4 border-t border-slate-800 flex justify-end">
+        <button onclick="closeModal('modal-info')" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-xs transition">
+          Entendido
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CADASTRAR NOVO ITEM -->
+  <div id="modal-add-item" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-add-item')" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-brand-600/20 text-brand-400 border border-brand-500/30 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-barcode"></i>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-white">Cadastrar Item no Estoque</h2>
+          <p class="text-xs text-slate-400">Associe o código de barras à localização 3D</p>
+        </div>
+      </div>
+
+      <form id="form-add-item" onsubmit="handleAddItemSubmit(event)" class="space-y-3.5 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Nome do Produto / Peça</label>
+          <input required id="new-item-name" type="text" placeholder="Ex: Motor Trifásico 2CV" class="w-full bg-slate-950 text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Código de Barras (EAN/SKU)</label>
+            <div class="flex gap-1.5">
+              <input required id="new-item-barcode" type="text" placeholder="789..." class="w-full bg-slate-950 text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none font-mono">
+              <button type="button" onclick="generateRandomBarcode()" class="bg-slate-800 hover:bg-slate-700 px-2.5 rounded-xl text-slate-300" title="Gerar Código">
+                <i class="fa-solid fa-dice"></i>
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Quantidade em Estoque</label>
+            <input required id="new-item-qty" type="number" min="1" value="50" class="w-full bg-slate-950 text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Setor Destino</label>
+            <select id="new-item-sector" class="w-full bg-slate-950 text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none">
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-300 font-semibold mb-1">Prateleira / Rack 3D</label>
+            <select id="new-item-rack" class="w-full bg-slate-950 text-white px-3 py-2 rounded-xl border border-slate-700 focus:border-brand-500 focus:outline-none">
+              <option value="R-01">Rack R-01 (Nível Baixo)</option>
+              <option value="R-02">Rack R-02 (Nível Médio)</option>
+              <option value="R-03">Rack R-03 (Nível Alto)</option>
+              <option value="R-04">Rack R-04 (Expedição)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-end gap-2">
+          <button type="button" onclick="closeModal('modal-add-item')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold">Cancelar</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold flex items-center gap-1.5 shadow-lg shadow-brand-500/20">
+            <i class="fa-solid fa-floppy-disk"></i> Salvar & Localizar
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: DIMENSÕES DO TERRENO & PLANTA 3D -->
+  <div id="modal-terrain" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
+      <button onclick="closeModal('modal-terrain')" class="absolute top-5 right-5 text-slate-400 hover:text-white text-lg">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg">
+          <i class="fa-solid fa-ruler-combined"></i>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-white">Configurar Terreno da Empresa</h2>
+          <p class="text-xs text-slate-400">Ajuste o tamanho do galpão para a separação automática</p>
+        </div>
+      </div>
+
+      <div class="space-y-4 text-xs">
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Comprimento do Terreno (Metros)</label>
+          <div class="flex items-center gap-3">
+            <input id="terrain-length" type="range" min="30" max="100" value="60" oninput="updateTerrainValue('length', this.value)" class="flex-1 accent-indigo-500">
+            <span id="label-terrain-length" class="font-mono font-bold text-white w-12 text-right">60m</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-300 font-semibold mb-1">Largura do Terreno (Metros)</label>
+          <div class="flex items-center gap-3">
+            <input id="terrain-width" type="range" min="20" max="80" value="40" oninput="updateTerrainValue('width', this.value)" class="flex-1 accent-indigo-500">
+            <span id="label-terrain-width" class="font-mono font-bold text-white w-12 text-right">40m</span>
+          </div>
+        </div>
+
+        <div class="pt-2 flex justify-end gap-2">
+          <button onclick="closeModal('modal-terrain')" class="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold">Fechar</button>
+          <button onclick="applyTerrainUpdate()" class="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold flex items-center gap-1.5">
+            <i class="fa-solid fa-arrows-rotate"></i> Atualizar Planta 3D
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Context Barcode Beeper & Notifications -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 border border-slate-700 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 pointer-events-none">
+    <i id="toast-icon" class="fa-solid fa-check-circle text-emerald-400 text-sm"></i>
+    <span id="toast-msg">Item localizado com sucesso!</span>
+  </div>
+
+  <!-- Application Logic & Three.js 3D Engine -->
+  <script>
+    const warehouseData = {
+      dimensions: { length: 60, width: 40, aisles: 3 },
+      sectors: [
+        { id: 'SEC_A', name: 'Setor A - Fixadores & Parafusos', code: 'A', color: 0x3b82f6, hex: '#3b82f6', posX: -16, posZ: -10, sizeX: 12, sizeZ: 14, icon: 'fa-wrench' },
+        { id: 'SEC_B', name: 'Setor B - Motores & Peças Pesadas', code: 'B', color: 0x8b5cf6, hex: '#8b5cf6', posX: 16, posZ: -10, sizeX: 12, sizeZ: 14, icon: 'fa-gears' },
+        { id: 'SEC_C', name: 'Setor C - Placas & Eletrônica', code: 'C', color: 0x06b6d4, hex: '#06b6d4', posX: -16, posZ: 10, sizeX: 12, sizeZ: 14, icon: 'fa-microchip' },
+        { id: 'SEC_D', name: 'Setor D - Embalagens & Plásticos', code: 'D', color: 0xf59e0b, hex: '#f59e0b', posX: 16, posZ: 10, sizeX: 12, sizeZ: 14, icon: 'fa-box-open' },
+        { id: 'SEC_EXP', name: 'Setor E - Expedição Rápida', code: 'E', color: 0x10b981, hex: '#10b981', posX: 0, posZ: 14, sizeX: 14, sizeZ: 8, icon: 'fa-truck-fast' },
+      ],
+      items: [
+        { id: 'ITM-01', name: 'Parafuso Sextavado M8 Inox', barcode: '7891001', sectorId: 'SEC_A', rack: 'R-01', qty: 340, unit: 'un', posX: -16, posZ: -12, levelY: 1.2 },
+        { id: 'ITM-02', name: 'Porca Autotravante M8', barcode: '7891002', sectorId: 'SEC_A', rack: 'R-02', qty: 520, unit: 'un', posX: -16, posZ: -8, levelY: 2.2 },
+        { id: 'ITM-03', name: 'Motor Trifásico 2CV 1750RPM', barcode: '7892001', sectorId: 'SEC_B', rack: 'R-03', qty: 14, unit: 'un', posX: 16, posZ: -12, levelY: 0.8 },
+        { id: 'ITM-04', name: 'Redutor de Velocidade 1:40', barcode: '7892002', sectorId: 'SEC_B', rack: 'R-01', qty: 8, unit: 'un', posX: 16, posZ: -8, levelY: 1.6 },
+        { id: 'ITM-05', name: 'Placa Controladora CLP Industrial', barcode: '7893001', sectorId: 'SEC_C', rack: 'R-02', qty: 45, unit: 'un', posX: -16, posZ: 8, levelY: 1.5 },
+        { id: 'ITM-06', name: 'Sensor Indutivo de Proximidade', barcode: '7893002', sectorId: 'SEC_C', rack: 'R-03', qty: 110, unit: 'un', posX: -16, posZ: 12, levelY: 2.4 },
+        { id: 'ITM-07', name: 'Bobina Filme Stretch 500mm', barcode: '7894001', sectorId: 'SEC_D', rack: 'R-01', qty: 90, unit: 'rolos', posX: 16, posZ: 8, levelY: 1.0 },
+        { id: 'ITM-08', name: 'Fita Adesiva Industrial 48mm', barcode: '7894002', sectorId: 'SEC_D', rack: 'R-02', qty: 230, unit: 'un', posX: 16, posZ: 12, levelY: 1.8 },
+        { id: 'ITM-09', name: 'Caixas de Papelão Reforçadas G', barcode: '7895001', sectorId: 'SEC_EXP', rack: 'R-04', qty: 125, unit: 'fardos', posX: 0, posZ: 14, levelY: 1.2 },
+      ]
+    };
+
+    let scene, camera, renderer, controls;
+    let racksGroup, targetPinMesh;
+    let audioCtx = null;
+
+    function playBeep(success = true) {
+      try {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (success) {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1760, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+          osc.start(audioCtx.currentTime);
+          osc.stop(audioCtx.currentTime + 0.13);
+        } else {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+          gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.25);
+          osc.start(audioCtx.currentTime);
+          osc.stop(audioCtx.currentTime + 0.26);
+        }
+      } catch (e) {
+        console.warn('AudioContext prevented by browser policy');
+      }
+    }
+
+    function initThreeScene() {
+      const container = document.getElementById('canvas-container');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b0f19);
+      scene.fog = new THREE.FogExp2(0x0b0f19, 0.012);
+
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+      camera.position.set(38, 42, 52);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      controls.minDistance = 10;
+      controls.maxDistance = 160;
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+      dirLight.position.set(30, 60, 25);
+      dirLight.castShadow = true;
+      scene.add(dirLight);
+
+      const accentLight = new THREE.PointLight(0x6366f1, 1.2, 80);
+      accentLight.position.set(0, 20, 0);
+      scene.add(accentLight);
+
+      buildWarehouseArchitecture();
+
+      window.addEventListener('resize', onWindowResize);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+
+        if (targetPinMesh) {
+          const time = Date.now() * 0.003;
+          targetPinMesh.position.y = 4.5 + Math.sin(time) * 0.6;
+          targetPinMesh.rotation.y += 0.02;
+        }
+
+        renderer.render(scene, camera);
+      }
+      animate();
+    }
+
+    function buildWarehouseArchitecture() {
+      const existing = scene.getObjectByName('warehouse-root');
+      if (existing) scene.remove(existing);
+
+      const root = new THREE.Group();
+      root.name = 'warehouse-root';
+
+      const dim = warehouseData.dimensions;
+
+      // Concrete Floor
+      const floorGeo = new THREE.PlaneGeometry(dim.length, dim.width);
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.8, metalness: 0.2 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      root.add(floor);
+
+      // Floor Grid Overlay
+      const grid = new THREE.GridHelper(dim.length, Math.floor(dim.length / 2), 0x334155, 0x1e293b);
+      grid.position.y = 0.02;
+      root.add(grid);
+
+      // Main Corridor
+      const corridorGeo = new THREE.PlaneGeometry(6, dim.width);
+      const corridorMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+      const corridor = new THREE.Mesh(corridorGeo, corridorMat);
+      corridor.rotation.x = -Math.PI / 2;
+      corridor.position.y = 0.03;
+      root.add(corridor);
+
+      // Sectors & Racks
+      racksGroup = new THREE.Group();
+      root.add(racksGroup);
+
+      warehouseData.sectors.forEach(sec => {
+        const secGeo = new THREE.PlaneGeometry(sec.sizeX, sec.sizeZ);
+        const secMat = new THREE.MeshStandardMaterial({
+          color: sec.color,
+          roughness: 0.9,
+          transparent: true,
+          opacity: 0.12
+        });
+        const secFloor = new THREE.Mesh(secGeo, secMat);
+        secFloor.rotation.x = -Math.PI / 2;
+        secFloor.position.set(sec.posX, 0.03, sec.posZ);
+        root.add(secFloor);
+
+        const edges = new THREE.EdgesGeometry(secGeo);
+        const lineMat = new THREE.LineBasicMaterial({ color: sec.color, transparent: true, opacity: 0.4 });
+        const line = new THREE.LineSegments(edges, lineMat);
+        line.rotation.x = -Math.PI / 2;
+        line.position.set(sec.posX, 0.04, sec.posZ);
+        root.add(line);
+
+        buildIndustrialRacksForSector(sec, racksGroup);
+      });
+
+      scene.add(root);
+    }
+
+    function buildIndustrialRacksForSector(sec, parentGroup) {
+      const rackWidth = 8;
+      const rackDepth = 2.4;
+      const rackHeight = 4.5;
+      const offsets = [-3.5, 3.5];
+
+      offsets.forEach((offZ) => {
+        const rackGroup = new THREE.Group();
+        rackGroup.position.set(sec.posX, 0, sec.posZ + offZ);
+
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8, roughness: 0.4 });
+        const shelfMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.5, roughness: 0.5 });
+        const boxMat = new THREE.MeshStandardMaterial({ color: sec.color, roughness: 0.6 });
+
+        const pillarGeo = new THREE.BoxGeometry(0.2, rackHeight, 0.2);
+        const p1 = new THREE.Mesh(pillarGeo, frameMat); p1.position.set(-rackWidth/2, rackHeight/2, -rackDepth/2);
+        const p2 = new THREE.Mesh(pillarGeo, frameMat); p2.position.set(rackWidth/2, rackHeight/2, -rackDepth/2);
+        const p3 = new THREE.Mesh(pillarGeo, frameMat); p3.position.set(-rackWidth/2, rackHeight/2, rackDepth/2);
+        const p4 = new THREE.Mesh(pillarGeo, frameMat); p4.position.set(rackWidth/2, rackHeight/2, rackDepth/2);
+        rackGroup.add(p1, p2, p3, p4);
+
+        [0.8, 2.2, 3.6].forEach((shelfY) => {
+          const shelfGeo = new THREE.BoxGeometry(rackWidth, 0.1, rackDepth);
+          const shelf = new THREE.Mesh(shelfGeo, shelfMat);
+          shelf.position.y = shelfY;
+          shelf.castShadow = true;
+          shelf.receiveShadow = true;
+          rackGroup.add(shelf);
+
+          for (let b = -3; b <= 3; b += 1.8) {
+            if (Math.random() > 0.2) {
+              const boxW = 1.1 + Math.random() * 0.3;
+              const boxH = 0.7 + Math.random() * 0.4;
+              const boxD = 1.4;
+              const boxGeo = new THREE.BoxGeometry(boxW, boxH, boxD);
+              const box = new THREE.Mesh(boxGeo, boxMat);
+              box.position.set(b, shelfY + boxH/2 + 0.05, (Math.random() - 0.5) * 0.4);
+              box.castShadow = true;
+              rackGroup.add(box);
+            }
+          }
+        });
+
+        parentGroup.add(rackGroup);
+      });
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('canvas-container');
+      if (!container || !renderer || !camera) return;
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height);
+    }
+
+    function setCameraView(type) {
+      if (!camera || !controls) return;
+      controls.target.set(0, 0, 0);
+
+      if (type === 'iso') {
+        camera.position.set(38, 42, 52);
+      } else if (type === 'top') {
+        camera.position.set(0, 75, 0.01);
+      } else if (type === 'entry') {
+        camera.position.set(0, 6, -30);
+        controls.target.set(0, 2, 0);
+      }
+      controls.update();
+    }
+
+    function resetCamera() {
+      setCameraView('iso');
+    }
+
+    function highlightItemLocation(item) {
+      if (targetPinMesh) scene.remove(targetPinMesh);
+
+      const pinGroup = new THREE.Group();
+      pinGroup.position.set(item.posX, 4.5, item.posZ);
+
+      const pinHeadGeo = new THREE.ConeGeometry(0.9, 2.2, 16);
+      pinHeadGeo.rotateX(Math.PI);
+      const pinHeadMat = new THREE.MeshStandardMaterial({
+        color: 0xef4444,
+        emissive: 0xb91c1c,
+        emissiveIntensity: 0.6
+      });
+      const pinHead = new THREE.Mesh(pinHeadGeo, pinHeadMat);
+      pinGroup.add(pinHead);
+
+      const haloGeo = new THREE.RingGeometry(0.8, 1.2, 32);
+      const haloMat = new THREE.MeshBasicMaterial({ color: 0xef4444, side: THREE.DoubleSide });
+      const halo = new THREE.Mesh(haloGeo, haloMat);
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.y = -1.2;
+      pinGroup.add(halo);
+
+      targetPinMesh = pinGroup;
+      scene.add(targetPinMesh);
+
+      focusCameraOnItem(item.posX, item.posZ);
+    }
+
+    function focusCameraOnItem(x, z) {
+      if (!controls || !camera) return;
+      controls.target.set(x, 1, z);
+      camera.position.set(x + 18, 22, z + 22);
+      controls.update();
+    }
+
+    function renderInventoryList(itemsToRender) {
+      const list = itemsToRender || warehouseData.items;
+      const container = document.getElementById('items-list-container');
+      const countEl = document.getElementById('items-count');
+      countEl.textContent = list.length;
+
+      if (list.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-slate-500 text-xs">
+            <i class="fa-solid fa-magnifying-glass text-2xl mb-2 text-slate-600"></i>
+            <p>Nenhum item encontrado com esse código ou nome.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = list.map(item => {
+        const sector = warehouseData.sectors.find(s => s.id === item.sectorId) || { name: 'Geral', color: '#6366f1' };
+        return `
+          <div class="bg-slate-950/90 border border-slate-800/90 hover:border-brand-500/50 p-3 rounded-2xl transition group relative">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-brand-400 border border-slate-700">
+                    <i class="fa-solid fa-barcode text-[9px] mr-1"></i>${item.barcode}
+                  </span>
+                  <span class="text-[10px] px-2 py-0.5 rounded text-white font-semibold" style="background-color: ${sector.hex}33; border: 1px solid ${sector.hex}66; color: ${sector.hex}">
+                    ${sector.code} • ${item.rack}
+                  </span>
+                </div>
+                <h4 class="font-bold text-xs text-white group-hover:text-brand-300 transition leading-snug">${item.name}</h4>
+                <div class="flex items-center gap-3 mt-1.5 text-[11px] text-slate-400">
+                  <span>Estoque: <strong class="text-slate-200">${item.qty} ${item.unit}</strong></span>
+                </div>
+              </div>
+
+              <button onclick="triggerLocateItem('${item.id}')" class="shrink-0 bg-brand-600/20 hover:bg-brand-600 text-brand-400 hover:text-white p-2.5 rounded-xl border border-brand-500/30 transition shadow-sm" title="Localizar no 3D">
+                <i class="fa-solid fa-crosshairs text-xs"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function triggerLocateItem(itemId) {
+      const item = warehouseData.items.find(i => i.id === itemId);
+      if (!item) return;
+      playBeep(true);
+      highlightItemLocation(item);
+      showToast(`Item localizado: ${item.name}`, 'fa-crosshairs');
+    }
+
+    function handleSearchInput(e) {
+      const query = e.target.value.toLowerCase().trim();
+      const filtered = warehouseData.items.filter(i => 
+        i.name.toLowerCase().includes(query) ||
+        i.barcode.toLowerCase().includes(query) ||
+        i.rack.toLowerCase().includes(query)
+      );
+      renderInventoryList(filtered);
+
+      if (e.key === 'Enter' && filtered.length > 0) {
+        triggerLocateItem(filtered[0].id);
+      }
+    }
+
+    function scanBarcodeSimulation() {
+      const input = document.getElementById('barcode-input');
+      let item;
+      if (input.value.trim() !== '') {
+        item = warehouseData.items.find(i => i.barcode.includes(input.value.trim()) || i.name.toLowerCase().includes(input.value.toLowerCase().trim()));
+      }
+      if (!item) {
+        const randIndex = Math.floor(Math.random() * warehouseData.items.length);
+        item = warehouseData.items[randIndex];
+      }
+
+      input.value = item.barcode;
+      playBeep(true);
+      showToast(`Bip! Código lido: ${item.barcode}`, 'fa-barcode');
+      renderInventoryList([item]);
+      highlightItemLocation(item);
+    }
+
+    function filterItemsBySector(sectorId) {
+      if (sectorId === 'ALL') {
+        renderInventoryList(warehouseData.items);
+      } else {
+        const filtered = warehouseData.items.filter(i => i.sectorId === sectorId);
+        renderInventoryList(filtered);
+      }
+    }
+
+    function populateSectorDropdowns() {
+      const filterSelect = document.getElementById('filter-sector');
+      const addSelect = document.getElementById('new-item-sector');
+
+      filterSelect.innerHTML = '<option value="ALL">Todos os Setores</option>' + 
+        warehouseData.sectors.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      addSelect.innerHTML = warehouseData.sectors.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+    }
+
+    function renderSectorsTab() {
+      const container = document.getElementById('sectors-management-list');
+      container.innerHTML = warehouseData.sectors.map(sec => {
+        const itemCount = warehouseData.items.filter(i => i.sectorId === sec.id).length;
+        return `
+          <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl flex items-center justify-center text-white" style="background-color: ${sec.hex}">
+                <i class="fa-solid ${sec.icon}"></i>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-white">${sec.name}</h4>
+                <p class="text-[11px] text-slate-400">Área 3D: ${sec.sizeX}m x ${sec.sizeZ}m • ${itemCount} itens vinculados</p>
+              </div>
+            </div>
+            <button onclick="focusCameraOnItem(${sec.posX}, ${sec.posZ})" class="text-xs text-slate-400 hover:text-white p-2" title="Focar Setor na Planta">
+              <i class="fa-solid fa-crosshairs"></i>
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function autoOptimizeWarehouse() {
+      playBeep(true);
+      showToast('Otimizando distribuição dos setores pelo terreno...', 'fa-wand-magic-sparkles');
+      buildWarehouseArchitecture();
+      setCameraView('top');
+      setTimeout(() => {
+        showToast('Setores reorganizados com sucesso!', 'fa-circle-check');
+      }, 700);
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function generateRandomBarcode() {
+      const rand = '789' + Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('new-item-barcode').value = rand;
+      playBeep(true);
+    }
+
+    function handleAddItemSubmit(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-item-name').value.trim();
+      const barcode = document.getElementById('new-item-barcode').value.trim();
+      const qty = parseInt(document.getElementById('new-item-qty').value, 10);
+      const sectorId = document.getElementById('new-item-sector').value;
+      const rack = document.getElementById('new-item-rack').value;
+
+      const sector = warehouseData.sectors.find(s => s.id === sectorId);
+
+      const newItem = {
+        id: 'ITM-' + (warehouseData.items.length + 1).toString().padStart(2, '0'),
+        name: name,
+        barcode: barcode,
+        sectorId: sectorId,
+        rack: rack,
+        qty: qty,
+        unit: 'un',
+        posX: sector.posX + (Math.random() - 0.5) * 4,
+        posZ: sector.posZ + (Math.random() - 0.5) * 4,
+        levelY: 1.5
+      };
+
+      warehouseData.items.unshift(newItem);
+      renderInventoryList();
+      renderSectorsTab();
+      updateGlobalStats();
+
+      closeModal('modal-add-item');
+      e.target.reset();
+
+      playBeep(true);
+      showToast(`Item "${name}" cadastrado e alocado no ${sector.name}!`, 'fa-circle-check');
+      highlightItemLocation(newItem);
+    }
+
+    function updateTerrainValue(key, val) {
+      if (key === 'length') {
+        warehouseData.dimensions.length = parseInt(val, 10);
+        document.getElementById('label-terrain-length').textContent = `${val}m`;
+      } else if (key === 'width') {
+        warehouseData.dimensions.width = parseInt(val, 10);
+        document.getElementById('label-terrain-width').textContent = `${val}m`;
+      }
+    }
+
+    function applyTerrainUpdate() {
+      buildWarehouseArchitecture();
+      closeModal('modal-terrain');
+      playBeep(true);
+      showToast('Nova planta 3D gerada com sucesso!', 'fa-ruler-combined');
+    }
+
+    function switchTab(tabId) {
+      ['items', 'sectors'].forEach(t => {
+        document.getElementById(`tab-content-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`tab-btn-${t}`);
+        btn.classList.remove('bg-slate-800', 'text-white');
+        btn.classList.add('text-slate-400');
+      });
+
+      document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      activeBtn.classList.add('bg-slate-800', 'text-white');
+      activeBtn.classList.remove('text-slate-400');
+    }
+
+    let isMobileSimMode = false;
+    function toggleMobileView() {
+      const panel = document.getElementById('sidebar-panel');
+      const btn = document.getElementById('btn-device-toggle');
+      isMobileSimMode = !isMobileSimMode;
+
+      if (isMobileSimMode) {
+        panel.classList.remove('w-full', 'lg:w-96', 'xl:w-[420px]');
+        panel.classList.add('w-[360px]', 'mx-auto', 'border-x');
+        btn.classList.add('bg-brand-600', 'text-white');
+        btn.classList.remove('bg-slate-800', 'text-slate-300');
+        showToast('Modo de exibição mobile ativado (Android / iOS)', 'fa-mobile-screen');
+      } else {
+        panel.classList.add('w-full', 'lg:w-96', 'xl:w-[420px]');
+        panel.classList.remove('w-[360px]', 'mx-auto', 'border-x');
+        btn.classList.remove('bg-brand-600', 'text-white');
+        btn.classList.add('bg-slate-800', 'text-slate-300');
+        showToast('Modo desktop restaurado', 'fa-desktop');
+      }
+      setTimeout(onWindowResize, 350);
+    }
+
+    function showToast(message, iconClass = 'fa-check-circle') {
+      const toast = document.getElementById('toast');
+      const icon = document.getElementById('toast-icon');
+      const msg = document.getElementById('toast-msg');
+
+      icon.className = `fa-solid ${iconClass} text-emerald-400 text-sm`;
+      msg.textContent = message;
+
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      setTimeout(() => {
+        toast.classList.add('translate-y-20', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+      }, 3000);
+    }
+
+    function updateGlobalStats() {
+      const totalUnits = warehouseData.items.reduce((acc, curr) => acc + curr.qty, 0);
+      document.getElementById('stat-items').textContent = `${totalUnits.toLocaleString('pt-BR')} un`;
+      document.getElementById('stat-sectors').textContent = `${warehouseData.sectors.length} Ativos`;
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initThreeScene();
+      populateSectorDropdowns();
+      renderInventoryList();
+      renderSectorsTab();
+      updateGlobalStats();
+    });
+  </script>
+</body>
+</html>
